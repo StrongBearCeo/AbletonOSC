@@ -34,8 +34,9 @@ class AbletonOSCClient:
         self.verbose = False
 
     def handle_osc(self, address, *params):
+        # print("Received OSC: %s %s" % (address, params))
         if address in self.address_handlers:
-            self.address_handlers[address](params)
+            self.address_handlers[address](address, params)
         if self.verbose:
             print(address, params)
 
@@ -47,15 +48,38 @@ class AbletonOSCClient:
     def send_message(self,
                      address: str,
                      params: Iterable = ()):
+        """
+        Send a message to the given OSC address on the server.
+
+        Args:
+            address (str): The OSC address to send to (e.g. /live/song/set/tempo)
+            params (Iterable): Optional list of arguments to pass to the OSC message.
+        """
         self.client.send_message(address, params)
 
-    def add_handler(self,
+    def set_handler(self,
                     address: str,
                     fn: Callable = None):
+        """
+        Set the handler for the specified OSC message.
+
+        Args:
+            address (str): The OSC address to listen for (e.g. /live/song/get/tempo)
+            fn (Callable): The function to trigger when a message received.
+                           Must accept a two arguments:
+                            - str: the OSC address
+                            - tuple: the OSC parameters
+        """
         self.address_handlers[address] = fn
 
     def remove_handler(self,
                        address: str):
+        """
+        Remove the handler for the specified OSC message.
+
+        Args:
+            address (str): The OSC address whose handler to remove.
+        """
         del self.address_handlers[address]
 
     def await_message(self,
@@ -78,14 +102,14 @@ class AbletonOSCClient:
         rv = None
         _event = threading.Event()
 
-        def received_response(params):
+        def received_response(address, params):
             print("Received response: %s %s" % (address, str(params)))
             nonlocal rv
             nonlocal _event
             rv = params
             _event.set()
 
-        self.add_handler(address, received_response)
+        self.set_handler(address, received_response)
         _event.wait(timeout)
         self.remove_handler(address)
         if not _event.is_set():
@@ -103,7 +127,7 @@ class AbletonOSCClient:
         n_chunk_received = 0
         total_chunks = 0
 
-        def received_response(params):
+        def received_response(address, params):
             nonlocal rv
             nonlocal _event
             nonlocal data_sent_in_chunks
@@ -130,7 +154,7 @@ class AbletonOSCClient:
             if not data_sent_in_chunks or (n_chunk_received == total_chunks):
                 _event.set()
 
-        self.add_handler(address, received_response)
+        self.set_handler(address, received_response)
         self.send_message(address, params)
         _event.wait(timeout)
         self.remove_handler(address)
